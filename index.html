@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="theme-color" content="#101522">
+<title>IPA Offset Scanner</title>
+<style>
+:root{color-scheme:dark;--bg:#0d1220;--panel:#171f30;--muted:#9aa8bd;--line:#2b3850;--accent:#8b7cff;--green:#37d6a0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#f4f6fb;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:900px;margin:auto;padding:20px 14px 50px}.top{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.logo{width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#8b7cff,#35c8bd);display:grid;place-items:center;font-size:24px}
+h1{font-size:21px;margin:0}p.sub,.muted{color:var(--muted);font-size:13px;margin:4px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:15px;margin:12px 0}
+.pick{border:1.5px dashed #596985;border-radius:13px;padding:24px 12px;text-align:center}
+button,.btn{border:0;border-radius:11px;padding:12px 15px;background:var(--accent);color:white;font-weight:650;font-size:14px}
+button:disabled{opacity:.4}.secondary{background:#2a354a}.green{color:var(--green)}
+input[type=file]{display:none}label.btn{display:inline-block;margin-top:12px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#101827;border-radius:12px;padding:12px}.stat b{font-size:20px;display:block}.stat span{font-size:12px;color:var(--muted)}
+.progress{height:7px;background:#293449;border-radius:8px;overflow:hidden;margin-top:12px}.bar{height:100%;width:0;background:var(--green);transition:width .2s}
+.tabs{display:flex;gap:7px;overflow:auto;margin:12px 0}.tabs button{white-space:nowrap;background:#263249}.tabs button.active{background:var(--accent)}
+input[type=search]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#101827;color:white;margin:8px 0}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}th{color:#aebbd0}
+.tablewrap{overflow:auto;max-height:420px}.tag{font-size:11px;padding:4px 7px;border-radius:8px;background:#28344b;color:#c9d3e4}
+.note{font-size:12px;line-height:1.55;color:var(--muted)}.error{color:#ff9b9b}.ok{color:var(--green)}
+@media(max-width:430px){.stats{grid-template-columns:repeat(3,1fr)}.stat{padding:9px}.stat b{font-size:17px}table{min-width:620px}}
+</style>
+</head>
+<body><main>
+<header class="top"><div class="logo">⌕</div><div><h1>IPA Offset Scanner</h1><p class="sub">Phân tích Mach-O / ARM64 • chạy cục bộ</p></div></header>
+<section class="card">
+ <div class="pick"><div style="font-size:34px">📦</div><b>Chọn file IPA</b><p class="muted">File được xử lý trong trình duyệt, không tải lên máy chủ.</p>
+ <label class="btn" for="ipa">Chọn IPA từ Tệp</label><input id="ipa" type="file" accept=".ipa,.zip,application/zip">
+ <p id="filename" class="muted">Chưa chọn file</p></div>
+ <div class="row" style="margin-top:13px"><span id="status" class="muted">Đang chờ file IPA</span><button id="scan" disabled>Phân tích IPA</button></div>
+ <div class="progress"><div class="bar" id="bar"></div></div>
+</section>
+<section class="card">
+ <div class="stats">
+  <div class="stat"><b id="nBin">0</b><span>Binary tìm thấy</span></div>
+  <div class="stat"><b id="nSym">0</b><span>Symbols</span></div>
+  <div class="stat"><b id="nMeta">0</b><span>Chuỗi metadata</span></div>
+ </div>
+ <p id="summary" class="note">Chưa có dữ liệu phân tích.</p>
+</section>
+<section class="card">
+ <div class="row"><b>Kết quả phân tích</b><div class="row"><button class="secondary" id="txt" disabled>Xuất TXT</button><button class="secondary" id="json" disabled>JSON</button></div></div>
+ <div class="tabs" id="tabs">
+  <button class="active" data-tab="binary">Binary</button><button data-tab="symbols">Symbols</button><button data-tab="classes">Class names</button><button data-tab="selectors">Selectors</button><button data-tab="sections">Sections</button>
+ </div>
+ <input id="filter" type="search" placeholder="Lọc kết quả..." disabled>
+ <div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"><tr><td class="muted">Chưa có kết quả.</td></tr></tbody></table></div>
+</section>
+<section class="card"><b>Giới hạn & lưu ý</b><p class="note">Công cụ đọc ZIP (Stored/Deflate) và phân tích Mach-O 64-bit, FAT/FAT64, load commands, section, symbol table và chuỗi Objective-C trong các section phổ biến. Class names/selectors được trích từ chuỗi metadata; đây không phải bộ giải mã đầy đủ Objective-C runtime. Binary bị mã hóa, symbol bị strip hoặc dùng cơ chế bảo vệ có thể cho kết quả thiếu. RVA là địa chỉ tương đối theo image base; file offset là vị trí byte trong binary. Không thể suy ra địa chỉ runtime cố định khi ASLR đang hoạt động.</p></section>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let selected=null, rows={binary:[],symbols:[],classes:[],selectors:[],sections:[]}, active='binary', binaryCount=0;
+const u32=(v,o,l=true)=>l?v.getUint32(o,true):v.getUint32(o,false);
+const u64=(v,o,l=true)=>{const n=v.getBigUint64(o,l);return n<=BigInt(Number.MAX_SAFE_INTEGER)?Number(n):n.toString()};
+const hex=n=>'0x'+(typeof n==='string'?BigInt(n).toString(16):Number(n).toString(16));
+const cstr=(b,o,max=4096)=>{let e=o;while(e<b.length&&e-o<max&&b[e])e++;return new TextDecoder('utf-8').decode(b.subarray(o,e));};
+const setStatus=(s,p)=>{$('status').textContent=s;if(p!==undefined)$('bar').style.width=p+'%';};
+$('ipa').addEventListener('change',e=>{selected=e.target.files[0]||null;$('filename').textContent=selected?selected.name+' • '+(selected.size/1048576).toFixed(2)+' MB':'Chưa chọn file';$('scan').disabled=!selected;});
+$('scan').onclick=async()=>{if(!selected)return; $('scan').disabled=true;Object.keys(rows).forEach(k=>rows[k]=[]);binaryCount=0;render();try{setStatus('Đang đọc ZIP...',5);const entries=await readZip(selected);const bins=entries.filter(x=>/\/[^/]+$/.test(x.name)&&(/\/Payload\/.*\.app\//i.test('/'+x.name)||/^Payload\/.*\.app\//i.test(x.name)));const candidates=[];for(const e of bins){if(e.data.length>=4&&isMach(e.data))candidates.push(e);}if(!candidates.length)throw Error('Không tìm thấy Mach-O trong Payload/*.app. IPA có thể dùng cấu trúc khác hoặc file bị lỗi.');$('nBin').textContent=candidates.length;
+for(let i=0;i<candidates.length;i++){setStatus('Phân tích '+(i+1)+'/'+candidates.length+': '+candidates[i].name,10+Math.round(85*i/candidates.length));parseMach(candidates[i].name,candidates[i].data);}
+$('nSym').textContent=rows.symbols.length;$('nMeta').textContent=rows.classes.length+rows.selectors.length;
+$('summary').innerHTML='<span class="ok">Hoàn tất.</span> Đã phân tích '+candidates.length+' Mach-O. Symbols: '+rows.symbols.length+'. Class strings: '+rows.classes.length+'. Selector strings: '+rows.selectors.length+'.';
+$('txt').disabled=$('json').disabled=false;$('filter').disabled=false;setStatus('Phân tích hoàn tất',100);render();
+}catch(err){setStatus('Lỗi: '+err.message);$('summary').innerHTML='<span class="error"></span>'; $('summary').textContent='Không thể phân tích: '+err.message;}finally{$('scan').disabled=false;}};
+function isMach(b){const m=[0xfeedfacf,0xcffaedfe,0xcafebabe,0xbebafeca,0xcafebabf,0xbfbafeca];const n=(b[0]<<24|b[1]<<16|b[2]<<8|b[3])>>>0;return m.includes(n);}
+async function readZip(file){const b=new Uint8Array(await file.arrayBuffer()),v=new DataView(b.buffer,b.byteOffset,b.byteLength);let eocd=-1;for(let i=b.length-22;i>=Math.max(0,b.length-65558);i--){if(u32(v,i)===0x06054b50){eocd=i;break;}}if(eocd<0)throw Error('Không tìm thấy ZIP directory.');const count=v.getUint16(eocd+10,true),cdSize=u32(v,eocd+12),cdOff=u32(v,eocd+16);if(count===0xffff||cdOff===0xffffffff)throw Error('ZIP64 chưa được hỗ trợ trong phiên bản này.');let p=cdOff,out=[];for(let i=0;i<count;i++){if(u32(v,p)!==0x02014b50)throw Error('ZIP central directory không hợp lệ.');const method=v.getUint16(p+10,true),csize=u32(v,p+20),usize=u32(v,p+24),nl=v.getUint16(p+28,true),el=v.getUint16(p+30,true),cl=v.getUint16(p+32,true),lo=u32(v,p+42),name=new TextDecoder().decode(b.subarray(p+46,p+46+nl));p+=46+nl+el+cl;if(name.endsWith('/'))continue;if(usize>180*1024*1024)continue;if(u32(v,lo)!==0x04034b50)continue;const lnl=v.getUint16(lo+26,true),lel=v.getUint16(lo+28,true),start=lo+30+lnl+lel,comp=b.slice(start,start+csize);let data;if(method===0)data=comp;else if(method===8){if(!('DecompressionStream'in window))throw Error('Safari này chưa hỗ trợ DecompressionStream. Hãy dùng iOS/Safari mới hơn.');let ds;try{ds=new DecompressionStream('deflate-raw')}catch(_){throw Error('Trình duyệt không hỗ trợ ZIP Deflate-raw. Hãy thử Safari mới hơn.');}const stream=new Blob([comp]).stream().pipeThrough(ds);data=new Uint8Array(await new Response(stream).arrayBuffer());}else continue;if(data.length!==usize)continue;out.push({name,data});}return out;}
+function parseMach(name,b){const v=new DataView(b.buffer,b.byteOffset,b.byteLength);const magic=v.getUint32(0,false);if(magic===0xcafebabe||magic===0xcafebabf||magic===0xbebafeca||magic===0xbfbafeca){const le=(magic===0xbebafeca||magic===0xbfbafeca),n=u32(v,4,le),is64=magic===0xcafebabf||magic===0xbfbafeca;for(let i=0;i<n;i++){let o=8+i*(is64?32:20),off=u32(v,o+8,le),size=is64?Number(u64(v,o+16,le)):u32(v,o+12,le);if(size&&off+size<=b.length)parseMach(name+' [slice '+i+']',b.subarray(off,off+size));}return;}
+const le=magic===0xcffaedfe;if(magic!==0xfeedfacf&&magic!==0xcffaedfe)return;const cpu=u32(v,4,le),ncmd=u32(v,16,le),cmdsize=u32(v,20,le);let p=32,sections=[],sym=null,base=Number.MAX_SAFE_INTEGER;
+for(let i=0;i<ncmd&&p+8<=b.length;i++){const cmd=u32(v,p,le),sz=u32(v,p+4,le);if(sz<8||p+sz>b.length)break;
+if(cmd===0x19){const nsects=u32(v,p+64,le);let q=p+72;for(let j=0;j<nsects;j++,q+=80){const sect=cstr(b,q,16),seg=cstr(b,q+16,16),addr=u64(v,q+32,le),size=u64(v,q+40,le),off=u32(v,q+48,le);sections.push({file:name,segment:seg,section:sect,vmaddr:addr,size, fileOffset:off});if(seg==='__TEXT'&&Number(addr)<base)base=Number(addr);}}
+else if(cmd===2){sym={symoff:u32(v,p+8,le),nsyms:u32(v,p+12,le),stroff:u32(v,p+16,le),strsize:u32(v,p+20,le)};}
+p+=sz;}
+const arch=cpu===0x0100000c?'ARM64':cpu===0x01000007?'x86_64':'CPU '+hex(cpu);rows.binary.push({file:name,architecture:arch,format:'Mach-O 64',sections:sections.length,symbolTable:sym?'Có':'Không'});
+for(const s of sections){rows.sections.push({...s,rva:Number(s.vmaddr)-base});if(['__objc_classname','__objc_methname','__cstring','__objc_methtype'].includes(s.section)&&s.fileOffset+s.size<=b.length){let start=s.fileOffset,end=start+Number(s.size),p=start;while(p<end){while(p<end&&b[p]===0)p++;if(p>=end)break;let z=p;while(z<end&&b[z]!==0&&z-p<512)z++;if(z-p>=3){let str=cstr(b,p,512);if(/^[\x20-\x7e]+$/.test(str)){const item={file:name,value:str,section:s.section,fileOffset:p,rva:p>=s.fileOffset?Number(s.vmaddr)-base+(p-s.fileOffset):0};if(s.section==='__objc_classname')rows.classes.push(item);if(s.section==='__objc_methname')rows.selectors.push(item);}}p=z+1;}}}
+if(sym&&sym.symoff+sym.nsyms*16<=b.length&&sym.stroff+sym.strsize<=b.length){for(let i=0;i<sym.nsyms;i++){const o=sym.symoff+i*16,strx=u32(v,o,le),type=b[o+4],sect=b[o+5],desc=v.getUint16(o+6,le),value=u64(v,o+8,le);if(!strx||strx>=sym.strsize)continue;const nm=cstr(b,sym.stroff+strx,1024);if(!nm)continue;const ntype=type&0x0e;if(ntype===0x0e){const rva=Number(value)-base;let fileOff=null;for(const s of sections){const a=Number(s.vmaddr),z=a+Number(s.size);if(Number(value)>=a&&Number(value)<z){fileOff=Number(s.fileOffset)+(Number(value)-a);break;}}rows.symbols.push({file:name,name:nm,address:hex(value),rva:hex(rva),fileOffset:fileOff===null?'':hex(fileOff),sectionIndex:sect});}}}}
+}
+const cols={binary:['file','architecture','format','sections','symbolTable'],symbols:['file','name','address','rva','fileOffset','sectionIndex'],classes:['file','value','section','fileOffset','rva'],selectors:['file','value','section','fileOffset','rva'],sections:['file','segment','section','vmaddr','size','fileOffset','rva']};
+function render(){const data=rows[active]||[],q=$('filter').value.toLowerCase(),filtered=data.filter(r=>Object.values(r).some(x=>String(x).toLowerCase().includes(q)));$('thead').innerHTML='<tr>'+cols[active].map(x=>'<th>'+x+'</th>').join('')+'</tr>';$('tbody').innerHTML=filtered.slice(0,3000).map(r=>'<tr>'+cols[active].map(k=>'<td>'+esc(r[k]??'')+'</td>').join('')+'</tr>').join('')||'<tr><td>Không có kết quả phù hợp.</td></tr>';if(filtered.length>3000)$('summary').textContent+=' Đang hiển thị 3000/'+filtered.length+' dòng; file xuất vẫn chứa toàn bộ.';}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{active=b.dataset.tab;document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));render();});
+$('filter').oninput=render;
+function download(name,content,type){const a=document.createElement('a'),u=URL.createObjectURL(new Blob([content],{type}));a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1500);}
+$('json').onclick=()=>download('ipa-scan-results.json',JSON.stringify({generatedAt:new Date().toISOString(),results:rows},null,2),'application/json');
+$('txt').onclick=()=>{let t='IPA OFFSET SCANNER RESULTS\n\n';for(const [k,a] of Object.entries(rows)){t+='=== '+k.toUpperCase()+' ===\n';for(const r of a)t+=Object.entries(r).map(([x,y])=>x+': '+y).join(' | ')+'\n';t+='\n';}download('ipa-scan-results.txt',t,'text/plain');};
+</script></body></html>
